@@ -13,13 +13,13 @@ GOOGLE_MAPS_API_KEY = 'AIzaSyCvm9R7PaT8xTSLaRgPY-unEMnv2RVacC8'
 # Create a bot instance
 bot = telebot.TeleBot(TOKEN)
 
-# Создание экземпляра геокодера
+# Create a geocoder instance
 geolocator = GoogleV3(api_key=GOOGLE_MAPS_API_KEY)
 
-# Словарь для хранения местоположений пользователей
+# Dictionary to store user locations
 user_locations = {}
 
-# Список достопримечательностей
+# List of attractions
 attractions = [
     {
         "name": "Байтерек",
@@ -101,7 +101,7 @@ def send_welcome(message):
     markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True)
     btn = telebot.types.KeyboardButton('Поделиться местоположением', request_location=True)
     markup.add(btn)
-    bot.reply_to(message, f"Привет, {message.from_user.first_name}! Я твой гид Shyraq по Астане. Пожалуйста, поделись своим местоположением.", reply_markup=markup)
+    bot.reply_to(message, f"Привет, {message.from_user.first_name}! Я твой гид по Астане. Пожалуйста, поделись своим местоположением.", reply_markup=markup)
 
 
 def get_nearby_attractions(latitude, longitude):
@@ -132,16 +132,21 @@ def location(message):
         location = geolocator.reverse((latitude, longitude), exactly_one=True)
         address = location.address
         user_locations[message.chat.id] = (latitude, longitude)  # Сохранение местоположения пользователя
-        markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True)
-        btn_nearby = telebot.types.KeyboardButton('Найти ближайшие достопримечательности')
-        btn_list = telebot.types.KeyboardButton('Список достопримечательностей')
-        markup.add(btn_nearby, btn_list)
-        bot.reply_to(message, f"Вы находитесь здесь: {address}. Выберите действие ниже.",
-                     reply_markup=markup)
+        markup = telebot.types.ReplyKeyboardRemove(selective=False)
+        bot.reply_to(message, f"Ваше местоположение: {address}.", reply_markup=markup)
+        bot.send_message(message.chat.id, "Выберите действие ниже.", reply_markup=generate_reply_markup())
     except GeocoderTimedOut:
         bot.reply_to(message, "Запрос к геокодеру превысил лимит времени. Пожалуйста, попробуйте позже.")
     except Exception as e:
         bot.reply_to(message, f"Произошла ошибка: {str(e)}")
+
+
+def generate_reply_markup():
+    markup = telebot.types.ReplyKeyboardMarkup(one_time_keyboard=True)
+    btn_nearby = telebot.types.KeyboardButton('Найти ближайшие достопримечательности')
+    btn_list = telebot.types.KeyboardButton('Список достопримечательностей')
+    markup.add(btn_nearby, btn_list)
+    return markup
 
 
 def generate_inline_keyboard():
@@ -161,7 +166,8 @@ def generate_inline_keyboard():
         keyboard.row(InlineKeyboardButton(f"{attraction['name']}", callback_data=callback_data))
     keyboard.row(
         InlineKeyboardButton('Найти ближайшие достопримечательности', callback_data='find_nearby'),
-        InlineKeyboardButton('Список достопримечательностей', callback_data='list_attractions')
+        InlineKeyboardButton('Список достопримечательностей', callback_data='list_attractions'),
+        InlineKeyboardButton('Citypass', callback_data='citypass')
     )
     return keyboard
 
@@ -191,6 +197,28 @@ def callback_query(call):
             latitude, longitude = user_locations[call.message.chat.id]
             keyboard = generate_inline_keyboard()
             bot.send_message(call.message.chat.id, "Выберите достопримечательность:", reply_markup=keyboard)
+        elif call.data == "citypass":
+            keyboard = InlineKeyboardMarkup()
+            keyboard.row(
+                InlineKeyboardButton('FAQ', callback_data='faq'),
+                InlineKeyboardButton('Перейти на сайт', url='https://astana.citypass.kz/ru/')
+            )
+            bot.send_message(call.message.chat.id, "Дополнительные возможности CityPass:", reply_markup=keyboard)
+        elif call.data == "faq":
+            keyboard = InlineKeyboardMarkup()
+            keyboard.row(
+                InlineKeyboardButton('На что нацелен сайт?', callback_data='faq_1'),
+                InlineKeyboardButton('Какие есть особенности сайта?', callback_data='faq_2')
+            )
+            keyboard.row(
+                InlineKeyboardButton('Что может предложить сайт потребителю кроме выгодных тарифов?',
+                                     callback_data='faq_3'),
+                InlineKeyboardButton('Какие есть тарифы?', callback_data='faq_4')
+            )
+            keyboard.row(
+                InlineKeyboardButton('А если мне неудобно ради этого заходить на сайт?', callback_data='faq_5')
+            )
+            bot.send_message(call.message.chat.id, "Выберите вопрос из FAQ:", reply_markup=keyboard)
         else:
             latitude, longitude = call.data.split(",")
             bot.send_location(call.message.chat.id, latitude, longitude)
@@ -253,5 +281,5 @@ def handle_text(message):
         bot.send_message(message.chat.id, "Выберите достопримечательность:", reply_markup=keyboard)
 
 
-# Запуск бота
+# Start the bot
 bot.polling()
